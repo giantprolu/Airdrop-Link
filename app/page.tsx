@@ -20,7 +20,7 @@ export default async function Home() {
             Bienvenue, {user?.firstName || "Utilisateur"} !
           </h2>
           <p className="text-gray-600 dark:text-gray-300">
-            Partagez vos photos instantanément entre vos appareils
+            Partagez vos fichiers instantanément entre vos appareils
           </p>
         </div>
 
@@ -29,12 +29,12 @@ export default async function Home() {
             href="/upload"
             className="block p-8 bg-white dark:bg-gray-800 rounded-2xl shadow-lg hover:shadow-xl transition-shadow border border-gray-100 dark:border-gray-700"
           >
-            <div className="text-4xl mb-4">📱</div>
+            <div className="text-4xl mb-4">📤</div>
             <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-              Upload
+              Envoyer
             </h3>
             <p className="text-gray-600 dark:text-gray-300">
-              Envoyez des photos depuis votre mobile
+              Uploadez photos, documents et fichiers
             </p>
           </Link>
 
@@ -42,12 +42,12 @@ export default async function Home() {
             href="/gallery"
             className="block p-8 bg-white dark:bg-gray-800 rounded-2xl shadow-lg hover:shadow-xl transition-shadow border border-gray-100 dark:border-gray-700"
           >
-            <div className="text-4xl mb-4">🖥️</div>
+            <div className="text-4xl mb-4">📁</div>
             <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-              Galerie
+              Mes fichiers
             </h3>
             <p className="text-gray-600 dark:text-gray-300">
-              Visualisez et téléchargez vos photos
+              Visualisez et téléchargez vos fichiers
             </p>
           </Link>
         </div>
