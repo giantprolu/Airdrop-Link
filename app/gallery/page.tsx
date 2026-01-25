@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { UserButton, useUser } from "@clerk/nextjs";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase-client";
+import ConfirmDialog from "@/components/ConfirmDialog";
 
 interface FileItem {
   id: string;
@@ -22,6 +23,10 @@ export default function GalleryPage() {
   const [files, setFiles] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Delete confirmation dialog state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [fileToDelete, setFileToDelete] = useState<FileItem | null>(null);
 
   const fetchFiles = useCallback(async () => {
     try {
@@ -100,11 +105,21 @@ export default function GalleryPage() {
     }
   };
 
-  const handleDelete = async (fileId: string) => {
-    if (!confirm("Supprimer ce fichier ?")) return;
+  const openDeleteDialog = (file: FileItem) => {
+    setFileToDelete(file);
+    setDeleteDialogOpen(true);
+  };
+
+  const closeDeleteDialog = () => {
+    setDeleteDialogOpen(false);
+    setFileToDelete(null);
+  };
+
+  const confirmDelete = async () => {
+    if (!fileToDelete) return;
 
     try {
-      const response = await fetch(`/api/files?id=${fileId}`, {
+      const response = await fetch(`/api/files?id=${fileToDelete.id}`, {
         method: "DELETE",
       });
 
@@ -112,9 +127,11 @@ export default function GalleryPage() {
         throw new Error("Failed to delete file");
       }
 
-      setFiles((prev) => prev.filter((f) => f.id !== fileId));
+      setFiles((prev) => prev.filter((f) => f.id !== fileToDelete.id));
     } catch (err) {
       console.error("Delete failed:", err);
+    } finally {
+      closeDeleteDialog();
     }
   };
 
@@ -260,7 +277,7 @@ export default function GalleryPage() {
                       Télécharger
                     </button>
                     <button
-                      onClick={() => handleDelete(file.id)}
+                      onClick={() => openDeleteDialog(file)}
                       className="py-2 px-3 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-sm font-medium rounded-lg hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -280,6 +297,18 @@ export default function GalleryPage() {
           Sync en direct
         </div>
       </main>
+
+      {/* Delete confirmation dialog */}
+      <ConfirmDialog
+        isOpen={deleteDialogOpen}
+        title="Supprimer ce fichier ?"
+        message={fileToDelete ? `"${fileToDelete.file_name}" sera définitivement supprimé.` : ""}
+        confirmText="Supprimer"
+        cancelText="Annuler"
+        confirmVariant="danger"
+        onConfirm={confirmDelete}
+        onCancel={closeDeleteDialog}
+      />
     </div>
   );
 }
