@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import { UserButton } from "@clerk/nextjs";
 import Link from "next/link";
+import ConfirmDialog from "@/components/ConfirmDialog";
+import { compressImage } from "@/lib/image-compression";
 
 interface SelectedFile {
   file: File;
@@ -15,19 +17,17 @@ export default function UploadPage() {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [clearAllDialogOpen, setClearAllDialogOpen] = useState(false);
+  const [compressImages, setCompressImages] = useState(true);
+  const [compressing, setCompressing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
+  const processFiles = useCallback((files: FileList | File[]) => {
     setError(null);
     setSuccess(null);
 
-    const newFiles: SelectedFile[] = [];
-
     Array.from(files).forEach((file) => {
-      // Create preview for images
       if (file.type.startsWith("image/")) {
         const reader = new FileReader();
         reader.onload = () => {
@@ -38,14 +38,48 @@ export default function UploadPage() {
         };
         reader.readAsDataURL(file);
       } else {
-        newFiles.push({ file, preview: null });
+        setSelectedFiles((prev) => [...prev, { file, preview: null }]);
       }
     });
+  }, []);
 
-    if (newFiles.length > 0) {
-      setSelectedFiles((prev) => [...prev, ...newFiles]);
-    }
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    processFiles(files);
   };
+
+  // Drag & Drop handlers
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Only set to false if we're leaving the drop zone entirely
+    if (e.currentTarget === e.target) {
+      setIsDragging(false);
+    }
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      processFiles(files);
+    }
+  }, [processFiles]);
 
   const removeFile = (index: number) => {
     setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
@@ -59,9 +93,32 @@ export default function UploadPage() {
     setSuccess(null);
 
     try {
+      // Compress images if enabled
+      let filesToUpload = selectedFiles.map((sf) => sf.file);
+
+      if (compressImages) {
+        setCompressing(true);
+        const compressedFiles: File[] = [];
+        for (const sf of selectedFiles) {
+          try {
+            const compressed = await compressImage(sf.file, {
+              maxWidth: 2048,
+              maxHeight: 2048,
+              quality: 0.85,
+              maxSizeMB: 10,
+            });
+            compressedFiles.push(compressed);
+          } catch {
+            compressedFiles.push(sf.file);
+          }
+        }
+        filesToUpload = compressedFiles;
+        setCompressing(false);
+      }
+
       const formData = new FormData();
-      selectedFiles.forEach((sf) => {
-        formData.append("files", sf.file);
+      filesToUpload.forEach((file) => {
+        formData.append("files", file);
       });
       if (description.trim()) {
         formData.append("description", description.trim());
@@ -110,6 +167,7 @@ export default function UploadPage() {
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
+    setClearAllDialogOpen(false);
   };
 
   const formatFileSize = (bytes: number) => {
@@ -130,42 +188,56 @@ export default function UploadPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-800">
-      <header className="flex items-center justify-between p-4 border-b bg-white/80 backdrop-blur dark:bg-gray-900/80">
-        <Link href="/" className="text-xl font-bold text-gray-900 dark:text-white">
+    <div className="min-h-screen bg-white dark:bg-black">
+      {/* Minimal header */}
+      <header className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-800">
+        <Link href="/" className="text-lg font-bold tracking-tight text-black dark:text-white">
           AirDrop Web
         </Link>
         <UserButton afterSignOutUrl="/" />
       </header>
 
-      <main className="max-w-2xl mx-auto p-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6 text-center">
-          Upload
+      <main className="max-w-xl mx-auto px-6 py-12">
+        <h1 className="text-4xl font-bold text-black dark:text-white tracking-tight mb-8">
+          Envoyer
         </h1>
 
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 border border-gray-100 dark:border-gray-700 space-y-6">
-          {/* File Selection */}
-          <div>
-            <label className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl cursor-pointer hover:border-blue-500 transition-colors">
-              <div className="flex flex-col items-center justify-center py-4">
+        <div className="space-y-6">
+          {/* File Selection with Drag & Drop - Swiss style */}
+          <div
+            onDragEnter={handleDragEnter}
+            onDragLeave={handleDragLeave}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+          >
+            <label
+              className={`flex flex-col items-center justify-center w-full h-48 border-2 cursor-pointer transition-all ${
+                isDragging
+                  ? "border-black dark:border-white bg-gray-50 dark:bg-gray-900"
+                  : "border-gray-300 dark:border-gray-700 hover:border-black dark:hover:border-white"
+              }`}
+            >
+              <div className="flex flex-col items-center justify-center py-6">
                 <svg
-                  className="w-10 h-10 mb-3 text-gray-400"
+                  className={`w-8 h-8 mb-4 transition-colors ${
+                    isDragging ? "text-black dark:text-white" : "text-gray-400"
+                  }`}
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
+                  strokeWidth={1.5}
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-                  />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
                 </svg>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  <span className="font-semibold">Cliquez</span> ou glissez vos fichiers
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  {isDragging ? (
+                    <span className="font-medium text-black dark:text-white">Déposez ici</span>
+                  ) : (
+                    <span>Glisser-déposer ou cliquer</span>
+                  )}
                 </p>
-                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                  Photos, documents, vidéos... (max 50MB/fichier)
+                <p className="text-xs text-gray-400 dark:text-gray-600 mt-2">
+                  Max 50MB par fichier
                 </p>
               </div>
               <input
@@ -178,52 +250,52 @@ export default function UploadPage() {
             </label>
           </div>
 
-          {/* Selected Files List */}
+          {/* Selected Files List - Swiss style */}
           {selectedFiles.length > 0 && (
-            <div className="space-y-3">
+            <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  {selectedFiles.length} fichier(s) sélectionné(s)
-                </h3>
+                <span className="text-sm font-medium text-black dark:text-white">
+                  {selectedFiles.length} fichier{selectedFiles.length > 1 ? "s" : ""}
+                </span>
                 <button
-                  onClick={clearAll}
-                  className="text-sm text-red-500 hover:text-red-600"
+                  onClick={() => setClearAllDialogOpen(true)}
+                  className="text-sm text-gray-500 hover:text-black dark:hover:text-white underline transition-colors"
                 >
                   Tout supprimer
                 </button>
               </div>
 
-              <div className="max-h-60 overflow-y-auto space-y-2">
+              <div className="max-h-60 overflow-y-auto divide-y divide-gray-200 dark:divide-gray-800 border border-gray-200 dark:border-gray-800">
                 {selectedFiles.map((sf, index) => (
                   <div
                     key={index}
-                    className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg"
+                    className="flex items-center gap-4 p-4 bg-white dark:bg-black"
                   >
                     {sf.preview ? (
                       <img
                         src={sf.preview}
                         alt="Preview"
-                        className="w-12 h-12 object-cover rounded"
+                        className="w-12 h-12 object-cover"
                       />
                     ) : (
-                      <div className="w-12 h-12 flex items-center justify-center bg-gray-200 dark:bg-gray-600 rounded text-2xl">
+                      <div className="w-12 h-12 flex items-center justify-center bg-gray-100 dark:bg-gray-900 text-xl">
                         {getFileIcon(sf.file.type)}
                       </div>
                     )}
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                      <p className="text-sm font-medium text-black dark:text-white truncate">
                         {sf.file.name}
                       </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                      <p className="text-xs text-gray-500 dark:text-gray-500">
                         {formatFileSize(sf.file.size)}
                       </p>
                     </div>
                     <button
                       onClick={() => removeFile(index)}
-                      className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+                      className="p-2 text-gray-400 hover:text-black dark:hover:text-white transition-colors"
                     >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                       </svg>
                     </button>
                   </div>
@@ -232,70 +304,119 @@ export default function UploadPage() {
             </div>
           )}
 
-          {/* Description Field */}
+          {/* Description Field - Swiss style */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Description (optionnel)
+            <label className="block text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">
+              Description
             </label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Ajoutez une description pour vos fichiers..."
-              className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-              rows={3}
+              placeholder="Optionnel..."
+              className="w-full px-4 py-3 border border-gray-200 dark:border-gray-800 bg-white dark:bg-black text-black dark:text-white placeholder-gray-400 focus:border-black dark:focus:border-white focus:outline-none resize-none"
+              rows={2}
             />
           </div>
 
-          {/* Upload Button */}
+          {/* Compression toggle - Swiss style */}
+          <div className="flex items-center justify-between py-4 border-t border-b border-gray-200 dark:border-gray-800">
+            <div>
+              <p className="text-sm font-medium text-black dark:text-white">
+                Compression auto
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-500">
+                Réduit la taille des images
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setCompressImages(!compressImages)}
+              className={`relative inline-flex h-6 w-11 items-center transition-colors ${
+                compressImages ? "bg-black dark:bg-white" : "bg-gray-300 dark:bg-gray-700"
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform bg-white dark:bg-black transition-transform ${
+                  compressImages ? "translate-x-6" : "translate-x-1"
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* Upload Button - Swiss style */}
           <button
             onClick={handleUpload}
-            disabled={uploading || selectedFiles.length === 0}
-            className="w-full py-3 px-4 bg-blue-500 text-white font-semibold rounded-xl hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+            disabled={uploading || compressing || selectedFiles.length === 0}
+            className="w-full py-4 px-6 bg-black dark:bg-white text-white dark:text-black font-medium hover:bg-gray-800 dark:hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-3"
           >
-            {uploading ? (
+            {compressing ? (
               <>
                 <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="none" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
-                Upload en cours...
+                Compression...
+              </>
+            ) : uploading ? (
+              <>
+                <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="none" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                Envoi...
               </>
             ) : (
               <>
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                Envoyer
+                {selectedFiles.length > 0 && (
+                  <span className="opacity-60">({selectedFiles.length})</span>
+                )}
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" />
                 </svg>
-                Uploader {selectedFiles.length > 0 ? `(${selectedFiles.length})` : ""}
               </>
             )}
           </button>
 
-          {/* Messages */}
+          {/* Messages - Swiss style */}
           {error && (
-            <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl text-red-600 dark:text-red-400 text-sm whitespace-pre-line">
+            <div className="p-4 border-l-4 border-red-500 bg-red-50 dark:bg-red-900/10 text-red-700 dark:text-red-400 text-sm whitespace-pre-line">
               {error}
             </div>
           )}
 
           {success && (
-            <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl text-green-600 dark:text-green-400 text-sm flex items-center gap-2">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
+            <div className="p-4 border-l-4 border-green-500 bg-green-50 dark:bg-green-900/10 text-green-700 dark:text-green-400 text-sm">
               {success}
             </div>
           )}
         </div>
 
-        <div className="mt-6 text-center">
+        {/* Footer link - Swiss style */}
+        <div className="mt-12 pt-8 border-t border-gray-200 dark:border-gray-800">
           <Link
             href="/gallery"
-            className="text-blue-500 hover:text-blue-600 font-medium"
+            className="inline-flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 hover:text-black dark:hover:text-white transition-colors"
           >
-            Voir la galerie →
+            Voir mes fichiers
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" />
+            </svg>
           </Link>
         </div>
       </main>
+
+      {/* Clear all confirmation dialog */}
+      <ConfirmDialog
+        isOpen={clearAllDialogOpen}
+        title="Tout supprimer ?"
+        message={`${selectedFiles.length} fichier(s) seront retirés de la liste.`}
+        confirmText="Tout supprimer"
+        cancelText="Annuler"
+        confirmVariant="danger"
+        onConfirm={clearAll}
+        onCancel={() => setClearAllDialogOpen(false)}
+      />
     </div>
   );
 }

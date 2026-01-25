@@ -11,8 +11,28 @@ CREATE TABLE IF NOT EXISTS files (
   file_type text,
   file_size bigint,
   description text,
+  is_favorite boolean DEFAULT false,
+  tags text[] DEFAULT '{}',
+  share_token text UNIQUE,
   created_at timestamp DEFAULT now()
 );
+
+-- Add new columns if table exists (for migration)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'files' AND column_name = 'is_favorite') THEN
+    ALTER TABLE files ADD COLUMN is_favorite boolean DEFAULT false;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'files' AND column_name = 'tags') THEN
+    ALTER TABLE files ADD COLUMN tags text[] DEFAULT '{}';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'files' AND column_name = 'share_token') THEN
+    ALTER TABLE files ADD COLUMN share_token text UNIQUE;
+  END IF;
+END $$;
+
+-- Create index for share_token lookups
+CREATE INDEX IF NOT EXISTS idx_files_share_token ON files(share_token) WHERE share_token IS NOT NULL;
 
 -- Migration: If photos table exists, copy data to files
 -- INSERT INTO files (id, user_id, file_path, file_name, created_at)
@@ -33,7 +53,15 @@ CREATE POLICY "Enable read access for anon"
   TO anon
   USING (true);
 
--- 5. Enable realtime for the files table
+-- 5. Allow public access to shared files via share_token
+DROP POLICY IF EXISTS "Public can view shared files" ON files;
+CREATE POLICY "Public can view shared files"
+  ON files
+  FOR SELECT
+  TO anon
+  USING (share_token IS NOT NULL);
+
+-- 6. Enable realtime for the files table
 DO $$
 BEGIN
   IF NOT EXISTS (

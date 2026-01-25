@@ -140,6 +140,69 @@ export async function GET() {
   }
 }
 
+export async function PATCH(request: NextRequest) {
+  try {
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const body = await request.json();
+    const { id, is_favorite, tags, generate_share_link, remove_share_link } = body;
+
+    if (!id) {
+      return NextResponse.json({ error: "File ID required" }, { status: 400 });
+    }
+
+    // Verify ownership
+    const { data: file, error: fetchError } = await supabaseAdmin
+      .from("files")
+      .select("*")
+      .eq("id", id)
+      .eq("user_id", userId)
+      .single();
+
+    if (fetchError || !file) {
+      return NextResponse.json({ error: "File not found" }, { status: 404 });
+    }
+
+    const updates: Record<string, unknown> = {};
+
+    if (typeof is_favorite === "boolean") {
+      updates.is_favorite = is_favorite;
+    }
+
+    if (Array.isArray(tags)) {
+      updates.tags = tags;
+    }
+
+    if (generate_share_link) {
+      updates.share_token = crypto.randomUUID();
+    }
+
+    if (remove_share_link) {
+      updates.share_token = null;
+    }
+
+    const { data: updatedFile, error: updateError } = await supabaseAdmin
+      .from("files")
+      .update(updates)
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (updateError) {
+      console.error("Update error:", updateError);
+      return NextResponse.json({ error: "Failed to update file" }, { status: 500 });
+    }
+
+    return NextResponse.json({ file: updatedFile });
+  } catch (error) {
+    console.error("Update error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
+
 export async function DELETE(request: NextRequest) {
   try {
     const { userId } = await auth();
