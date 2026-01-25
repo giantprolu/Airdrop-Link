@@ -104,7 +104,7 @@ export default function UploadPage() {
                   />
                 </svg>
                 <p className="mb-2 text-sm text-gray-500 dark:text-gray-400">
-                  <span className="font-semibold">Tap to select</span> or take a photo
+                  <span className="font-semibold">Galerie</span> ou <span className="font-semibold">Camera</span>
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
                   PNG, JPG, GIF, WebP (max 10MB)
@@ -114,7 +114,6 @@ export default function UploadPage() {
                 ref={fileInputRef}
                 type="file"
                 accept="image/*"
-                capture="environment"
                 onChange={handleFileChange}
                 className="hidden"
               />
