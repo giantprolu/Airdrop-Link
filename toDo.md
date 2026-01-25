@@ -1,1 +1,0 @@
-- [ ] pour les dialog box de type : "Supprimer ce fichier ?", je voudrais que ce soit custom et plus stylé sur desktop et mobile
