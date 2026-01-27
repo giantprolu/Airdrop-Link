@@ -447,7 +447,7 @@ export default function GalleryPage() {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-6 py-8">
+      <main className={`max-w-6xl mx-auto px-6 py-8 ${selectionMode && selectedIds.size > 0 ? "pb-32 sm:pb-8" : ""}`}>
         {/* Header - Swiss style */}
         <div className="flex items-end justify-between mb-8">
           <h1 className="text-4xl font-bold text-black dark:text-white tracking-tight">
@@ -512,37 +512,52 @@ export default function GalleryPage() {
           </button>
         </div>
 
-        {/* Selection actions bar - Swiss style */}
+        {/* Selection actions bar - Swiss style, fixed on mobile */}
         {selectionMode && selectedIds.size > 0 && (
-          <div className="flex items-center gap-4 mb-6 py-4 border-t border-b border-gray-200 dark:border-gray-800">
-            <span className="text-sm font-medium text-black dark:text-white">
-              {selectedIds.size} sélectionné{selectedIds.size > 1 ? "s" : ""}
-            </span>
-            <button
-              onClick={selectAll}
-              className="text-sm text-gray-500 hover:text-black dark:hover:text-white underline"
-            >
-              Tout
-            </button>
-            <button
-              onClick={clearSelection}
-              className="text-sm text-gray-500 hover:text-black dark:hover:text-white underline"
-            >
-              Aucun
-            </button>
-            <div className="flex-1" />
-            <button
-              onClick={handleBulkDownload}
-              className="px-4 py-2 text-sm font-medium bg-black dark:bg-white text-white dark:text-black hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors"
-            >
-              Télécharger
-            </button>
-            <button
-              onClick={() => setBulkDeleteDialogOpen(true)}
-              className="px-4 py-2 text-sm font-medium text-red-600 dark:text-red-400 border border-red-300 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-            >
-              Supprimer
-            </button>
+          <div className="fixed bottom-0 left-0 right-0 z-40 bg-white dark:bg-black border-t border-gray-200 dark:border-gray-800 p-4 sm:relative sm:border-t-0 sm:border-b sm:mb-6 sm:py-4 sm:px-0">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 max-w-6xl mx-auto">
+              {/* Selection info and quick actions */}
+              <div className="flex items-center justify-between sm:justify-start gap-3 sm:gap-4">
+                <span className="text-sm font-medium text-black dark:text-white">
+                  {selectedIds.size} sélectionné{selectedIds.size > 1 ? "s" : ""}
+                </span>
+                <div className="flex gap-3">
+                  <button
+                    onClick={selectAll}
+                    className="text-sm text-gray-500 hover:text-black dark:hover:text-white underline"
+                  >
+                    Tout
+                  </button>
+                  <button
+                    onClick={clearSelection}
+                    className="text-sm text-gray-500 hover:text-black dark:hover:text-white underline"
+                  >
+                    Aucun
+                  </button>
+                </div>
+              </div>
+              {/* Action buttons */}
+              <div className="flex gap-2 sm:ml-auto">
+                <button
+                  onClick={handleBulkDownload}
+                  className="flex-1 sm:flex-none px-4 py-3 sm:py-2 text-sm font-medium bg-black dark:bg-white text-white dark:text-black hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors flex items-center justify-center gap-2"
+                >
+                  <svg className="w-4 h-4 sm:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  Télécharger
+                </button>
+                <button
+                  onClick={() => setBulkDeleteDialogOpen(true)}
+                  className="flex-1 sm:flex-none px-4 py-3 sm:py-2 text-sm font-medium text-red-600 dark:text-red-400 border border-red-300 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center justify-center gap-2"
+                >
+                  <svg className="w-4 h-4 sm:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  Supprimer
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
@@ -754,8 +769,10 @@ export default function GalleryPage() {
           </>
         )}
 
-        {/* Realtime indicator - Swiss style */}
-        <div className="fixed bottom-4 right-4 px-3 py-2 bg-black dark:bg-white text-white dark:text-black text-xs font-medium flex items-center gap-2">
+        {/* Realtime indicator - Swiss style, hidden on mobile when selection active */}
+        <div className={`fixed right-4 px-3 py-2 bg-black dark:bg-white text-white dark:text-black text-xs font-medium flex items-center gap-2 transition-all ${
+          selectionMode && selectedIds.size > 0 ? "bottom-24 sm:bottom-4" : "bottom-4"
+        }`}>
           <span className="w-1.5 h-1.5 bg-white dark:bg-black animate-pulse" />
           Sync
         </div>
