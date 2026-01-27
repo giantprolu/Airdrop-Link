@@ -4,7 +4,8 @@
       "Bash(dir:*)",
       "Bash(npm install:*)",
       "Bash(npm run build:*)",
-      "Bash(node scripts/generate-icons.js:*)"
+      "Bash(node scripts/generate-icons.js:*)",
+      "Bash(npm run dev:*)"
     ]
   }
 }

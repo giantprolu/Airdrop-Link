@@ -94,6 +94,9 @@ const withPWA = withPWAInit({
 
 const nextConfig: NextConfig = {
   turbopack: {},
+  serverActions: {
+    bodySizeLimit: "50mb",
+  },
 };
 
 export default withPWA(nextConfig);
