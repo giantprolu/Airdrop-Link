@@ -12,6 +12,34 @@ const defaultOptions: CompressionOptions = {
   maxSizeMB: 5,
 };
 
+// Helper to create image source from file (with fallback for mobile)
+async function createImageSource(file: File): Promise<string> {
+  // Try URL.createObjectURL first (faster)
+  try {
+    const url = URL.createObjectURL(file);
+    // Test if URL is valid by creating a small request
+    return url;
+  } catch {
+    // Fallback to FileReader for mobile compatibility
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error("Failed to read file"));
+      reader.readAsDataURL(file);
+    });
+  }
+}
+
+// Helper to sanitize filename for File constructor (mobile compatibility)
+function sanitizeFilename(filename: string): string {
+  // Remove or replace characters that can cause issues on mobile
+  return filename
+    .replace(/[^\w\s.-]/g, "_") // Replace special chars with underscore
+    .replace(/\s+/g, "_") // Replace spaces with underscore
+    .replace(/_+/g, "_") // Collapse multiple underscores
+    .replace(/^_|_$/g, ""); // Remove leading/trailing underscores
+}
+
 export async function compressImage(
   file: File,
   options: CompressionOptions = {}
@@ -29,68 +57,86 @@ export async function compressImage(
     return file;
   }
 
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d");
+  return new Promise(async (resolve) => {
+    try {
+      const img = new Image();
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
 
-    img.onload = () => {
-      let { width, height } = img;
+      img.onload = () => {
+        try {
+          let { width, height } = img;
 
-      // Calculate new dimensions
-      if (width > (opts.maxWidth || 2048)) {
-        height = (height * (opts.maxWidth || 2048)) / width;
-        width = opts.maxWidth || 2048;
-      }
-      if (height > (opts.maxHeight || 2048)) {
-        width = (width * (opts.maxHeight || 2048)) / height;
-        height = opts.maxHeight || 2048;
-      }
+          // Calculate new dimensions
+          if (width > (opts.maxWidth || 2048)) {
+            height = (height * (opts.maxWidth || 2048)) / width;
+            width = opts.maxWidth || 2048;
+          }
+          if (height > (opts.maxHeight || 2048)) {
+            width = (width * (opts.maxHeight || 2048)) / height;
+            height = opts.maxHeight || 2048;
+          }
 
-      canvas.width = width;
-      canvas.height = height;
+          canvas.width = width;
+          canvas.height = height;
 
-      if (!ctx) {
+          if (!ctx) {
+            resolve(file);
+            return;
+          }
+
+          // Draw and compress
+          ctx.fillStyle = "#FFFFFF";
+          ctx.fillRect(0, 0, width, height);
+          ctx.drawImage(img, 0, 0, width, height);
+
+          canvas.toBlob(
+            (blob) => {
+              if (!blob) {
+                resolve(file);
+                return;
+              }
+
+              try {
+                // Sanitize filename for mobile compatibility
+                const safeName = sanitizeFilename(file.name) || "image.jpg";
+                const compressedFile = new File([blob], safeName, {
+                  type: "image/jpeg",
+                  lastModified: Date.now(),
+                });
+
+                // If compressed file is larger, return original
+                if (compressedFile.size >= file.size) {
+                  resolve(file);
+                  return;
+                }
+
+                resolve(compressedFile);
+              } catch {
+                // File constructor failed, return original
+                resolve(file);
+              }
+            },
+            "image/jpeg",
+            opts.quality || 0.8
+          );
+        } catch {
+          resolve(file);
+        }
+      };
+
+      img.onerror = () => {
+        // Failed to load image, return original
         resolve(file);
-        return;
-      }
+      };
 
-      // Draw and compress
-      ctx.fillStyle = "#FFFFFF";
-      ctx.fillRect(0, 0, width, height);
-      ctx.drawImage(img, 0, 0, width, height);
-
-      canvas.toBlob(
-        (blob) => {
-          if (!blob) {
-            resolve(file);
-            return;
-          }
-
-          // Create new file with original name
-          const compressedFile = new File([blob], file.name, {
-            type: "image/jpeg",
-            lastModified: Date.now(),
-          });
-
-          // If compressed file is larger, return original
-          if (compressedFile.size >= file.size) {
-            resolve(file);
-            return;
-          }
-
-          resolve(compressedFile);
-        },
-        "image/jpeg",
-        opts.quality || 0.8
-      );
-    };
-
-    img.onerror = () => {
-      reject(new Error("Failed to load image"));
-    };
-
-    img.src = URL.createObjectURL(file);
+      // Use helper that handles mobile compatibility
+      const src = await createImageSource(file);
+      img.src = src;
+    } catch {
+      // Any error, return original file
+      resolve(file);
+    }
   });
 }
 

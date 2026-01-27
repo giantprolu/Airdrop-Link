@@ -37,6 +37,9 @@ export default function GalleryPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectionMode, setSelectionMode] = useState(false);
 
+  // Pagination
+  const [visibleCount, setVisibleCount] = useState(12);
+
   // Dialogs
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [fileToDelete, setFileToDelete] = useState<FileItem | null>(null);
@@ -123,13 +126,14 @@ export default function GalleryPage() {
   const filteredFiles = useMemo(() => {
     let result = [...files];
 
-    // Search filter
+    // Search filter (now includes tags)
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       result = result.filter(
         (f) =>
           f.file_name.toLowerCase().includes(query) ||
-          (f.description && f.description.toLowerCase().includes(query))
+          (f.description && f.description.toLowerCase().includes(query)) ||
+          (f.tags && f.tags.some(tag => tag.toLowerCase().includes(query)))
       );
     }
 
@@ -157,6 +161,22 @@ export default function GalleryPage() {
 
     return result;
   }, [files, searchQuery, sortBy]);
+
+  // Paginated files for display
+  const paginatedFiles = useMemo(() => {
+    return filteredFiles.slice(0, visibleCount);
+  }, [filteredFiles, visibleCount]);
+
+  const hasMore = visibleCount < filteredFiles.length;
+
+  const loadMore = useCallback(() => {
+    setVisibleCount(prev => prev + 12);
+  }, []);
+
+  // Reset pagination when search/sort changes
+  useEffect(() => {
+    setVisibleCount(12);
+  }, [searchQuery, sortBy]);
 
   const handleDownload = async (file: FileItem) => {
     if (!file.url) return;
@@ -444,7 +464,7 @@ export default function GalleryPage() {
           <div className="relative flex-1">
             <input
               type="text"
-              placeholder="Rechercher..."
+              placeholder="Rechercher par nom, description ou tag..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full px-4 py-3 border border-gray-200 dark:border-gray-800 bg-white dark:bg-black text-black dark:text-white placeholder-gray-400 focus:border-black dark:focus:border-white focus:outline-none"
@@ -552,14 +572,15 @@ export default function GalleryPage() {
             )}
           </div>
         ) : (
+          <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredFiles.map((file) => (
+            {paginatedFiles.map((file) => (
               <div
                 key={file.id}
-                className={`bg-white dark:bg-gray-800 rounded-2xl shadow-lg overflow-hidden border transition-all ${
+                className={`bg-white dark:bg-black overflow-hidden border transition-all ${
                   selectedIds.has(file.id)
-                    ? "border-blue-500 ring-2 ring-blue-500"
-                    : "border-gray-100 dark:border-gray-700"
+                    ? "border-black dark:border-white"
+                    : "border-gray-200 dark:border-gray-800"
                 }`}
               >
                 {/* Preview - clickable for fullscreen */}
@@ -574,16 +595,16 @@ export default function GalleryPage() {
                   }}
                 >
                   {selectionMode && (
-                    <div className="absolute top-2 left-2 z-10">
+                    <div className="absolute top-3 left-3 z-10">
                       <div
-                        className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${
+                        className={`w-5 h-5 border-2 flex items-center justify-center transition-colors ${
                           selectedIds.has(file.id)
-                            ? "bg-blue-500 border-blue-500"
-                            : "bg-white/80 border-gray-300"
+                            ? "bg-black dark:bg-white border-black dark:border-white"
+                            : "bg-white/90 dark:bg-black/90 border-gray-400 dark:border-gray-600"
                         }`}
                       >
                         {selectedIds.has(file.id) && (
-                          <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-3 h-3 text-white dark:text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                           </svg>
                         )}
@@ -596,6 +617,8 @@ export default function GalleryPage() {
                       <img
                         src={file.url}
                         alt={file.file_name}
+                        loading="lazy"
+                        decoding="async"
                         className="w-full h-48 object-cover"
                       />
                       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
@@ -610,18 +633,18 @@ export default function GalleryPage() {
                       </div>
                     </>
                   ) : (
-                    <div className="w-full h-48 bg-gray-100 dark:bg-gray-700 flex flex-col items-center justify-center">
-                      <span className="text-5xl mb-2">{getFileIcon(file.file_type)}</span>
-                      <span className="text-xs text-gray-500 dark:text-gray-400 px-4 truncate max-w-full">
-                        {file.file_type || "Fichier"}
+                    <div className="w-full h-48 bg-gray-50 dark:bg-gray-900 flex flex-col items-center justify-center border-b border-gray-200 dark:border-gray-800">
+                      <span className="text-4xl mb-2">{getFileIcon(file.file_type)}</span>
+                      <span className="text-xs text-gray-500 dark:text-gray-500 font-mono px-4 truncate max-w-full uppercase tracking-wide">
+                        {file.file_type?.split("/").pop() || "fichier"}
                       </span>
                     </div>
                   )}
                 </div>
 
                 <div className="p-4">
-                  <div className="flex items-start justify-between mb-1">
-                    <p className="font-medium text-gray-900 dark:text-white truncate flex-1" title={file.file_name}>
+                  <div className="flex items-start justify-between mb-2">
+                    <p className="font-medium text-black dark:text-white truncate flex-1 text-sm" title={file.file_name}>
                       {file.file_name}
                     </p>
                     <button
@@ -629,10 +652,10 @@ export default function GalleryPage() {
                         e.stopPropagation();
                         toggleFavorite(file);
                       }}
-                      className="ml-2 p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                      className="ml-2 p-1 hover:bg-gray-100 dark:hover:bg-gray-900 transition-colors"
                     >
                       <svg
-                        className={`w-5 h-5 ${file.is_favorite ? "text-yellow-500 fill-yellow-500" : "text-gray-400"}`}
+                        className={`w-4 h-4 ${file.is_favorite ? "text-black dark:text-white fill-black dark:fill-white" : "text-gray-400"}`}
                         fill={file.is_favorite ? "currentColor" : "none"}
                         stroke="currentColor"
                         viewBox="0 0 24 24"
@@ -643,18 +666,18 @@ export default function GalleryPage() {
                   </div>
 
                   {file.description && (
-                    <p className="text-sm text-gray-600 dark:text-gray-300 mb-2 line-clamp-2">
+                    <p className="text-xs text-gray-600 dark:text-gray-400 mb-2 line-clamp-2">
                       {file.description}
                     </p>
                   )}
 
-                  {/* Tags */}
+                  {/* Tags - Swiss style */}
                   {file.tags && file.tags.length > 0 && (
                     <div className="flex flex-wrap gap-1 mb-2">
                       {file.tags.map((tag, idx) => (
                         <span
                           key={idx}
-                          className="px-2 py-0.5 text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full"
+                          className="px-2 py-0.5 text-xs border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400"
                         >
                           {tag}
                         </span>
@@ -662,7 +685,7 @@ export default function GalleryPage() {
                     </div>
                   )}
 
-                  <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 mb-3">
+                  <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-500 mb-3 font-mono">
                     <span>{formatDate(file.created_at)}</span>
                     {file.file_size && (
                       <>
@@ -672,42 +695,42 @@ export default function GalleryPage() {
                     )}
                   </div>
 
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 border-t border-gray-200 dark:border-gray-800 pt-3 mt-3">
                     <button
                       onClick={() => handleDownload(file)}
                       disabled={!file.url}
-                      className="flex-1 py-2 px-3 bg-blue-500 text-white text-sm font-medium rounded-lg hover:bg-blue-600 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                      className="flex-1 py-2 px-3 bg-black dark:bg-white text-white dark:text-black text-xs font-medium hover:bg-gray-800 dark:hover:bg-gray-100 disabled:opacity-30 transition-colors flex items-center justify-center gap-2"
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                       </svg>
                       Télécharger
                     </button>
                     <button
                       onClick={() => openShareDialog(file)}
-                      className={`py-2 px-3 text-sm font-medium rounded-lg transition-colors ${
+                      className={`py-2 px-3 text-xs font-medium transition-colors border ${
                         file.share_token
-                          ? "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/50"
-                          : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600"
+                          ? "border-black dark:border-white text-black dark:text-white"
+                          : "border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-black dark:hover:border-white hover:text-black dark:hover:text-white"
                       }`}
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
                       </svg>
                     </button>
                     <button
                       onClick={() => openTagDialog(file)}
-                      className="py-2 px-3 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 text-sm font-medium rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                      className="py-2 px-3 border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 text-xs font-medium hover:border-black dark:hover:border-white hover:text-black dark:hover:text-white transition-colors"
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
                       </svg>
                     </button>
                     <button
                       onClick={() => openDeleteDialog(file)}
-                      className="py-2 px-3 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-sm font-medium rounded-lg hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors"
+                      className="py-2 px-3 border border-gray-300 dark:border-gray-700 text-gray-500 dark:text-gray-500 text-xs font-medium hover:border-red-500 hover:text-red-500 dark:hover:border-red-500 dark:hover:text-red-500 transition-colors"
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                       </svg>
                     </button>
@@ -716,12 +739,25 @@ export default function GalleryPage() {
               </div>
             ))}
           </div>
+
+          {/* Load more button */}
+          {hasMore && (
+            <div className="mt-8 text-center">
+              <button
+                onClick={loadMore}
+                className="px-8 py-3 border border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-400 font-medium hover:border-black dark:hover:border-white hover:text-black dark:hover:text-white transition-colors"
+              >
+                Charger plus ({filteredFiles.length - visibleCount} restants)
+              </button>
+            </div>
+          )}
+          </>
         )}
 
-        {/* Realtime indicator */}
-        <div className="fixed bottom-4 right-4 px-3 py-2 bg-green-500 text-white text-xs font-medium rounded-full flex items-center gap-2 shadow-lg">
-          <span className="w-2 h-2 bg-white rounded-full animate-pulse" />
-          Sync en direct
+        {/* Realtime indicator - Swiss style */}
+        <div className="fixed bottom-4 right-4 px-3 py-2 bg-black dark:bg-white text-white dark:text-black text-xs font-medium flex items-center gap-2">
+          <span className="w-1.5 h-1.5 bg-white dark:bg-black animate-pulse" />
+          Sync
         </div>
       </main>
 
@@ -790,48 +826,48 @@ export default function GalleryPage() {
         </div>
       )}
 
-      {/* Share dialog */}
+      {/* Share dialog - Swiss style */}
       {shareDialogOpen && fileToShare && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
           onClick={() => setShareDialogOpen(false)}
         >
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+          <div className="absolute inset-0 bg-black/60" />
           <div
-            className="relative w-full max-w-md bg-white dark:bg-gray-800 rounded-2xl shadow-2xl overflow-hidden"
+            className="relative w-full max-w-md bg-white dark:bg-black border border-gray-200 dark:border-gray-800 overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="p-6">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                Partager le fichier
+              <h2 className="text-lg font-bold text-black dark:text-white mb-1 tracking-tight">
+                Partager
               </h2>
-              <p className="text-sm text-gray-600 dark:text-gray-300 mb-4 truncate">
+              <p className="text-xs text-gray-500 dark:text-gray-500 mb-6 truncate font-mono">
                 {fileToShare.file_name}
               </p>
 
               {shareLink ? (
-                <div className="space-y-3">
+                <div className="space-y-4">
                   <div className="flex gap-2">
                     <input
                       type="text"
                       value={shareLink}
                       readOnly
-                      className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white"
+                      className="flex-1 px-3 py-2 text-sm border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 text-black dark:text-white font-mono"
                     />
                     <button
                       onClick={copyShareLink}
-                      className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                      className={`px-4 py-2 text-sm font-medium transition-colors ${
                         copySuccess
-                          ? "bg-green-500 text-white"
-                          : "bg-blue-500 text-white hover:bg-blue-600"
+                          ? "bg-black dark:bg-white text-white dark:text-black"
+                          : "bg-black dark:bg-white text-white dark:text-black hover:bg-gray-800 dark:hover:bg-gray-100"
                       }`}
                     >
-                      {copySuccess ? "Copié !" : "Copier"}
+                      {copySuccess ? "Copié" : "Copier"}
                     </button>
                   </div>
                   <button
                     onClick={removeShareLink}
-                    className="w-full py-2 text-sm text-red-600 dark:text-red-400 hover:underline"
+                    className="w-full py-2 text-sm text-gray-500 hover:text-red-500 transition-colors"
                   >
                     Désactiver le partage
                   </button>
@@ -839,16 +875,16 @@ export default function GalleryPage() {
               ) : (
                 <button
                   onClick={generateShareLink}
-                  className="w-full py-3 px-4 bg-blue-500 text-white font-medium rounded-xl hover:bg-blue-600 transition-colors"
+                  className="w-full py-3 px-4 bg-black dark:bg-white text-white dark:text-black font-medium hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors"
                 >
-                  Générer un lien de partage
+                  Générer un lien
                 </button>
               )}
             </div>
-            <div className="p-4 bg-gray-50 dark:bg-gray-800/50 border-t border-gray-100 dark:border-gray-700">
+            <div className="p-4 border-t border-gray-200 dark:border-gray-800">
               <button
                 onClick={() => setShareDialogOpen(false)}
-                className="w-full py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+                className="w-full py-2 text-sm font-medium text-gray-500 hover:text-black dark:hover:text-white transition-colors"
               >
                 Fermer
               </button>
@@ -857,22 +893,22 @@ export default function GalleryPage() {
         </div>
       )}
 
-      {/* Tag dialog */}
+      {/* Tag dialog - Swiss style */}
       {tagDialogOpen && fileToTag && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
           onClick={() => setTagDialogOpen(false)}
         >
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+          <div className="absolute inset-0 bg-black/60" />
           <div
-            className="relative w-full max-w-md bg-white dark:bg-gray-800 rounded-2xl shadow-2xl overflow-hidden"
+            className="relative w-full max-w-md bg-white dark:bg-black border border-gray-200 dark:border-gray-800 overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="p-6">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                Modifier les tags
+              <h2 className="text-lg font-bold text-black dark:text-white mb-1 tracking-tight">
+                Tags
               </h2>
-              <p className="text-sm text-gray-600 dark:text-gray-300 mb-4 truncate">
+              <p className="text-xs text-gray-500 dark:text-gray-500 mb-6 truncate font-mono">
                 {fileToTag.file_name}
               </p>
 
@@ -881,22 +917,22 @@ export default function GalleryPage() {
                 value={tagInput}
                 onChange={(e) => setTagInput(e.target.value)}
                 placeholder="tag1, tag2, tag3..."
-                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-4 py-3 border border-gray-200 dark:border-gray-800 bg-white dark:bg-black text-black dark:text-white placeholder-gray-400 focus:border-black dark:focus:border-white focus:outline-none"
               />
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+              <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">
                 Séparez les tags par des virgules
               </p>
             </div>
-            <div className="flex gap-3 p-4 bg-gray-50 dark:bg-gray-800/50 border-t border-gray-100 dark:border-gray-700">
+            <div className="flex gap-3 p-4 border-t border-gray-200 dark:border-gray-800">
               <button
                 onClick={() => setTagDialogOpen(false)}
-                className="flex-1 py-2 px-4 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-600"
+                className="flex-1 py-2 px-4 text-sm font-medium text-gray-500 border border-gray-200 dark:border-gray-800 hover:border-black dark:hover:border-white hover:text-black dark:hover:text-white transition-colors"
               >
                 Annuler
               </button>
               <button
                 onClick={saveTags}
-                className="flex-1 py-2 px-4 text-sm font-medium text-white bg-blue-500 rounded-xl hover:bg-blue-600"
+                className="flex-1 py-2 px-4 text-sm font-medium text-white dark:text-black bg-black dark:bg-white hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors"
               >
                 Enregistrer
               </button>

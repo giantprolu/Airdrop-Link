@@ -29,8 +29,23 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      // Generate unique filename
-      const ext = file.name.split(".").pop() || "bin";
+      // Generate unique filename with robust extension extraction
+      let ext = "bin";
+      try {
+        const nameParts = file.name.split(".");
+        if (nameParts.length > 1) {
+          const rawExt = nameParts.pop() || "bin";
+          // Sanitize extension: only allow alphanumeric chars
+          ext = rawExt.toLowerCase().replace(/[^a-z0-9]/g, "") || "bin";
+        }
+        // Fallback based on MIME type if extension is invalid
+        if (!ext || ext === "bin") {
+          const mimeExt = file.type.split("/").pop()?.replace(/[^a-z0-9]/g, "");
+          if (mimeExt) ext = mimeExt;
+        }
+      } catch {
+        ext = "bin";
+      }
       const uniqueId = crypto.randomUUID();
       const filename = `${uniqueId}.${ext}`;
       const filePath = `${userId}/${filename}`;
