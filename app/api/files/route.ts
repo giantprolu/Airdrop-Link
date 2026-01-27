@@ -1,6 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "crypto";
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB per file
 
@@ -46,7 +47,7 @@ export async function POST(request: NextRequest) {
       } catch {
         ext = "bin";
       }
-      const uniqueId = crypto.randomUUID();
+      const uniqueId = randomUUID();
       const filename = `${uniqueId}.${ext}`;
       const filePath = `${userId}/${filename}`;
 
@@ -192,7 +193,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     if (generate_share_link) {
-      updates.share_token = crypto.randomUUID();
+      updates.share_token = randomUUID();
     }
 
     if (remove_share_link) {
