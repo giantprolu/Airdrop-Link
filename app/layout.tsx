@@ -16,7 +16,6 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "AirDrop Web",
   description: "Partagez vos fichiers instantanément entre vos appareils",
-  manifest: "/manifest.json",
   // iOS-specific meta tags
   // Safari sur iOS ne supporte pas entièrement les PWA comme Android/Chrome
   // Ces meta tags permettent une expérience "app-like" sur iOS
