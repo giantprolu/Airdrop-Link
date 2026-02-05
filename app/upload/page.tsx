@@ -116,27 +116,70 @@ export default function UploadPage() {
         setCompressing(false);
       }
 
-      const formData = new FormData();
-      filesToUpload.forEach((file) => {
-        formData.append("files", file);
-      });
-      if (description.trim()) {
-        formData.append("description", description.trim());
+      const uploadedFiles = [];
+      const errors: string[] = [];
+
+      // Upload each file directly to Supabase
+      for (const file of filesToUpload) {
+        try {
+          // 1. Get signed upload URL from our API
+          const urlResponse = await fetch("/api/upload-url", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              fileName: file.name,
+              fileType: file.type || "application/octet-stream",
+              fileSize: file.size,
+            }),
+          });
+
+          if (!urlResponse.ok) {
+            const urlData = await urlResponse.json();
+            throw new Error(urlData.error || "Failed to get upload URL");
+          }
+
+          const { signedUrl, filePath } = await urlResponse.json();
+
+          // 2. Upload directly to Supabase Storage
+          const uploadResponse = await fetch(signedUrl, {
+            method: "PUT",
+            headers: {
+              "Content-Type": file.type || "application/octet-stream",
+            },
+            body: file,
+          });
+
+          if (!uploadResponse.ok) {
+            throw new Error("Direct upload failed");
+          }
+
+          // 3. Register the file metadata in our database
+          const registerResponse = await fetch("/api/files/register", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              filePath,
+              fileName: file.name,
+              fileType: file.type || "application/octet-stream",
+              fileSize: file.size,
+              description: description.trim() || null,
+            }),
+          });
+
+          if (!registerResponse.ok) {
+            const regData = await registerResponse.json();
+            throw new Error(regData.error || "Failed to register file");
+          }
+
+          const { file: fileRecord } = await registerResponse.json();
+          uploadedFiles.push(fileRecord);
+        } catch (err) {
+          errors.push(`${file.name}: ${err instanceof Error ? err.message : "Upload failed"}`);
+        }
       }
 
-      const response = await fetch("/api/files", {
-        method: "POST",
-        body: formData,
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Upload failed");
-      }
-
-      const uploadedCount = data.uploaded?.length || 0;
-      const errorCount = data.errors?.length || 0;
+      const uploadedCount = uploadedFiles.length;
+      const errorCount = errors.length;
 
       if (uploadedCount > 0) {
         setSuccess(
@@ -149,8 +192,8 @@ export default function UploadPage() {
         }
       }
 
-      if (data.errors && data.errors.length > 0) {
-        setError(data.errors.join("\n"));
+      if (errors.length > 0) {
+        setError(errors.join("\n"));
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
