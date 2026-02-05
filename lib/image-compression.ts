@@ -14,20 +14,40 @@ const defaultOptions: CompressionOptions = {
 
 // Helper to create image source from file (with fallback for mobile)
 async function createImageSource(file: File): Promise<string> {
-  // Try URL.createObjectURL first (faster)
-  try {
-    const url = URL.createObjectURL(file);
-    // Test if URL is valid by creating a small request
-    return url;
-  } catch {
-    // Fallback to FileReader for mobile compatibility
-    return new Promise((resolve, reject) => {
+  // Try FileReader first for better mobile compatibility
+  return new Promise((resolve, reject) => {
+    try {
       const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = () => reject(new Error("Failed to read file"));
+      
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          resolve(reader.result);
+        } else {
+          reject(new Error("FileReader result is not a string"));
+        }
+      };
+      
+      reader.onerror = () => {
+        // Fallback to createObjectURL
+        try {
+          const url = URL.createObjectURL(file);
+          resolve(url);
+        } catch {
+          reject(new Error("Failed to read file"));
+        }
+      };
+      
       reader.readAsDataURL(file);
-    });
-  }
+    } catch {
+      // Final fallback
+      try {
+        const url = URL.createObjectURL(file);
+        resolve(url);
+      } catch {
+        reject(new Error("Failed to create image source"));
+      }
+    }
+  });
 }
 
 // Helper to sanitize filename for File constructor (mobile compatibility)
@@ -38,6 +58,30 @@ function sanitizeFilename(filename: string): string {
     .replace(/\s+/g, "_") // Replace spaces with underscore
     .replace(/_+/g, "_") // Collapse multiple underscores
     .replace(/^_|_$/g, ""); // Remove leading/trailing underscores
+}
+
+// Helper to create a File from Blob with mobile fallback
+function createFileFromBlob(blob: Blob, filename: string): File {
+  try {
+    // Try File constructor first
+    return new File([blob], filename, {
+      type: blob.type || "image/jpeg",
+      lastModified: Date.now(),
+    });
+  } catch {
+    // File constructor not supported (older mobile browsers)
+    // Create a Blob and add name property
+    const blobWithName = blob as unknown as File;
+    Object.defineProperty(blobWithName, 'name', {
+      writable: true,
+      value: filename
+    });
+    Object.defineProperty(blobWithName, 'lastModified', {
+      writable: true,
+      value: Date.now()
+    });
+    return blobWithName;
+  }
 }
 
 export async function compressImage(
@@ -100,10 +144,7 @@ export async function compressImage(
               try {
                 // Sanitize filename for mobile compatibility
                 const safeName = sanitizeFilename(file.name) || "image.jpg";
-                const compressedFile = new File([blob], safeName, {
-                  type: "image/jpeg",
-                  lastModified: Date.now(),
-                });
+                const compressedFile = createFileFromBlob(blob, safeName);
 
                 // If compressed file is larger, return original
                 if (compressedFile.size >= file.size) {
